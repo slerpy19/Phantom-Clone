@@ -25,7 +25,7 @@ jobs:
           set -o pipefail
           xcodebuild \
             -project "Youtube_Phantom_clone.xcodeproj" \
-            -target "Youtube_Phantom_clone" \
+            -scheme "Youtube_Phantom_clone" \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
