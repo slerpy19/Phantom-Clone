@@ -1,4 +1,4 @@
-name: Diagnose iOS Project
+name: Build iOS IPA
 
 on:
   workflow_dispatch:
@@ -6,64 +6,46 @@ on:
     branches:
       - main
 
-permissions:
-  contents: read
-
 jobs:
-  diagnose:
+  build:
     runs-on: macos-15
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Verify Kingfisher URL
+      - name: Check project files
         run: |
-          set -euxo pipefail
+          ls -la
+          test -d "Youtube_Phantom_clone.xcodeproj"
+          xcodebuild -version
 
-          python3 - <<'PY'
-          from pathlib import Path
-          import json
-
-          project_path = Path(
-              "Youtube_Phantom_clone.xcodeproj/project.pbxproj"
-          )
-          resolved_path = Path(
-              "Youtube_Phantom_clone.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
-          )
-
-          project = project_path.read_text()
-          resolved = json.loads(resolved_path.read_text())
-
-          print("=== Project format ===")
-          for line in project.splitlines():
-              if "objectVersion" in line:
-                  print(line.strip())
-
-          print("=== URL in project.pbxproj ===")
-          for line in project.splitlines():
-              if "repositoryURL" in line:
-                  print(repr(line.strip()))
-
-          print("=== URL in Package.resolved ===")
-          for pin in resolved.get("pins", []):
-              if pin.get("identity") == "kingfisher":
-                  print(repr(pin.get("location")))
-                  print("Version:", pin.get("state", {}).get("version"))
-                  print("Revision:", pin.get("state", {}).get("revision"))
-
-          print("=== Project syntax ===")
-          import subprocess
-          subprocess.run(
-              ["plutil", "-lint", str(project_path)],
-              check=True
-          )
-
-          print("=== Package.resolved JSON ===")
-          print("Valid JSON")
-          PY
-
-      - name: Show commit
+      - name: Build unsigned iOS app
         run: |
-          git log -1 --oneline
-          git status --short
+          set -o pipefail
+          xcodebuild \
+            -project "Youtube_Phantom_clone.xcodeproj" \
+            -target "Youtube_Phantom_clone" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/Youtube_Phantom_clone.app"
+          test -d "$APP"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload "$GITHUB_WORKSPACE/Youtube-Phantom-Clone.ipa"
+          test -f "$GITHUB_WORKSPACE/Youtube-Phantom-Clone.ipa"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Youtube-Phantom-Clone-unsigned-IPA
+          path: Youtube-Phantom-Clone.ipa
+          if-no-files-found: error
+          retention-days: 7
