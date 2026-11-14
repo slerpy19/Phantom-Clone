@@ -9,16 +9,32 @@ on:
 jobs:
   build:
     runs-on: macos-15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check project files
+      - name: Verify project files
         run: |
           ls -la
           test -d "Youtube_Phantom_clone.xcodeproj"
-          xcodebuild -version
+          xcodebuild -list -project "Youtube_Phantom_clone.xcodeproj"
+
+      - name: Clean stale build state
+        run: |
+          rm -rf "$RUNNER_TEMP/DerivedData" "$RUNNER_TEMP/ipa"
+          mkdir -p "$RUNNER_TEMP/ipa"
+
+      - name: Resolve Swift package dependencies
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project "Youtube_Phantom_clone.xcodeproj" \
+            -scheme "Youtube_Phantom_clone" \
+            -destination 'generic/platform=iOS' \
+            -sdk iphoneos \
+            -resolvePackageDependencies
 
       - name: Build unsigned iOS app
         run: |
@@ -27,17 +43,21 @@ jobs:
             -project "Youtube_Phantom_clone.xcodeproj" \
             -scheme "Youtube_Phantom_clone" \
             -configuration Release \
+            -destination 'generic/platform=iOS' \
             -sdk iphoneos \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
             build
 
       - name: Package unsigned IPA
         run: |
           APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/Youtube_Phantom_clone.app"
           test -d "$APP"
+
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
+
           cd "$RUNNER_TEMP/ipa"
           /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload "$GITHUB_WORKSPACE/Youtube-Phantom-Clone.ipa"
           test -f "$GITHUB_WORKSPACE/Youtube-Phantom-Clone.ipa"
