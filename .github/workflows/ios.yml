@@ -10,49 +10,55 @@ jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+      PROJECT: Youtube_Phantom_clone.xcodeproj
+      SCHEME: Youtube_Phantom_clone
+      DERIVED_DATA: ${{ runner.temp }}/DerivedData
+      SOURCE_PACKAGES: ${{ runner.temp }}/SourcePackages
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Verify project files
+      - name: Verify Xcode and project files
         run: |
-          ls -la
-          test -d "Youtube_Phantom_clone.xcodeproj"
-          xcodebuild -list -project "Youtube_Phantom_clone.xcodeproj"
+          xcodebuild -version
+          test -d "$PROJECT"
+          test -f "$PROJECT/project.pbxproj"
 
-      - name: Clean stale build state
+      - name: Clear transient build and package state
         run: |
-          rm -rf "$RUNNER_TEMP/DerivedData" "$RUNNER_TEMP/ipa"
+          rm -rf "$DERIVED_DATA" "$SOURCE_PACKAGES" "$RUNNER_TEMP/ipa"
           mkdir -p "$RUNNER_TEMP/ipa"
 
       - name: Resolve Swift package dependencies
         run: |
           set -o pipefail
           xcodebuild \
-            -project "Youtube_Phantom_clone.xcodeproj" \
-            -scheme "Youtube_Phantom_clone" \
-            -destination 'generic/platform=iOS' \
-            -sdk iphoneos \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
             -resolvePackageDependencies
 
       - name: Build unsigned iOS app
         run: |
           set -o pipefail
           xcodebuild \
-            -project "Youtube_Phantom_clone.xcodeproj" \
-            -scheme "Youtube_Phantom_clone" \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -sdk iphoneos \
-            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build
 
       - name: Package unsigned IPA
         run: |
-          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/Youtube_Phantom_clone.app"
+          APP="$DERIVED_DATA/Build/Products/Release-iphoneos/Youtube_Phantom_clone.app"
           test -d "$APP"
 
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
